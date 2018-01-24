@@ -1,0 +1,4 @@
+Pillow==5.0.0
+Pillow-PIL==0.1.dev0
+pip==9.0.1
+setuptools==28.8.0
