@@ -60,7 +60,7 @@ class GroupPageAnalysis(LinkAnalysis):
             if len_links > 0:
                 max_num = int(links[len_links-1])
                 for index in range(2, max_num + 1):
-                    page_url = "{0}/{1}.html".format(self.url, index)
+                    page_url = "{0}{1}.html".format(self.url, index)
                     pages.append(page_url)
                     # print(page_url)
         pass
@@ -116,31 +116,71 @@ def get_info_imgs():
     res = []
     tga = TagAnalysis(ass_url)
     tag_links = tga.get_tag_links()
+    index = 0
     for tag_link, tag_name in tag_links:
-        group = GroupPageAnalysis(tag_link)
-        group_pages = group.get_tag_pages()
-        for page in group_pages:
-            page_link_holder = PageLinksAnalysis(page)
-            page_links = page_link_holder.get_page_links()
-            for page_link, page_name in page_links:
-                picture_group_holder = PicturePageAnalysis(page_link)
-                picture_pages = picture_group_holder.get_picture_pages()
-                for picture_page in picture_pages:
-                    pictures_holder = PictureAnalysis(picture_page)
-                    pictures_info = pictures_holder.get_pictures_info()
-                    for picture_url, picture_name in pictures_info:
-                        directory = os.path.join("data", tag_name, page_name)
-                        filepath = os.path.join(directory, "%s.jpg" % picture_name)
-                        # 每张图片一组，包含 图片url，所在目录，存储路径
-                        res.append((
-                            picture_url, directory, filepath
-                        ))
-                        # break
-                    # break
-                break
-            break
+        if index == 1:
+            print(tag_link)
+            inset_array(res, get_tag_images(tag_link, tag_name))
+        index += 1
+    return res
+
+
+# 获取一个类型下所以图片
+def get_tag_images(tag_link, tag_name):
+    res = []
+    group = GroupPageAnalysis(tag_link)
+    group_pages = group.get_tag_pages()
+    for page in group_pages:
+        print(page)
+        inset_array(res, get_tag_page_images(page, tag_name))
         break
     return res
+
+
+# 获取类型下某一页面的所有图片 (女神 https://www.meitulu.com/t/nvshen/)
+def get_tag_page_images(page, tag_name):
+    res = []
+    page_link_holder = PageLinksAnalysis(page)
+    page_links = page_link_holder.get_page_links()
+    for page_link, page_name in page_links:
+        print(page_link)
+        inset_array(res, get_picture_page_images(page_link, page_name, tag_name))
+        # break
+    return res
+
+
+# 获取图片组所有图片 (https://www.meitulu.com/item/13028.html       [Bomb.tv] Miura Umi 写真套图             女神)
+def get_picture_page_images(page_link, page_name, tag_name):
+    res = []
+    picture_group_holder = PicturePageAnalysis(page_link)
+    picture_pages = picture_group_holder.get_picture_pages()
+    for picture_page in picture_pages:
+        print(picture_page)
+        inset_array(res, get_page_images(picture_page, tag_name, page_name))
+        # break
+    return res
+
+
+# 获取图片页面所有图片 (https://www.meitulu.com/item/13028_2.html       [Bomb.tv] Miura Umi 写真套图             女神)
+def get_page_images(picture_page, tag_name, page_name):
+    res = []
+    pictures_holder = PictureAnalysis(picture_page)
+    pictures_info = pictures_holder.get_pictures_info()
+    for picture_url, picture_name in pictures_info:
+        directory = os.path.join("data", tag_name, page_name)
+        filepath = os.path.join(directory, "%s.jpg" % picture_name)
+        # 每张图片一组，包含 图片url，所在目录，存储路径
+        res.append((
+            picture_url, directory, filepath
+        ))
+        # break
+    return res
+
+
+def inset_array(old, new):
+    for item in new:
+        old.append(item)
+    return old
 
 
 if __name__ == "__main__":
