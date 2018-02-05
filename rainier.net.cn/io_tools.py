@@ -3,6 +3,8 @@ import os
 import requests
 import time
 from multiprocessing import Process, Queue, Pool
+import threading
+from contextlib import closing
 
 defult_headers = {
 'Host': 'www.rainier.net.cn',
@@ -36,6 +38,41 @@ def setup_download_dir(directory):
     pass
 
 
+class ProgressBar(object):
+    def __init__(self, title,
+                 count=0.0,
+                 run_status=None,
+                 fin_status=None,
+                 total=100.0,
+                 unit='', sep='/'):
+        super(ProgressBar, self).__init__()
+        self.info = "【%s】%s %.2f %s %s %.2f %s"
+        self.title = title
+        self.total = total
+        self.count = count
+        self.status = run_status or ""
+        self.fin_status = fin_status or " " * len(self.status)
+        self.unit = unit
+        self.seq = sep
+
+    def __get_info(self):
+        # 【名称】状态 进度 单位 分割线 总数 单位
+        _info = self.info % (self.title, self.status,
+                             self.count/1024, self.unit, self.seq, self.total/1024, self.unit)
+        return _info
+
+    def refresh(self, count=1, status=None):
+        self.count += count
+        # if status is not None:
+        self.status = status or self.status
+        end_str = "\r"
+        if self.count >= self.total:
+            end_str = '\n'
+            self.status = status or self.fin_status
+        print(self.__get_info() + end_str)
+        # , end=end_str
+
+
 # 下载器
 class Downland:
 
@@ -43,7 +80,7 @@ class Downland:
         if headers == None:
             headers = defult_headers
         self.headers = headers
-        self.pool = None
+        self.queue = None
 
     def download_one(self, img):
         """ 下载一张图片 """
@@ -53,26 +90,57 @@ class Downland:
             print('exists:', filepath)
             return
         setup_download_dir(directory)
-        rsp = requests.get(url, headers=self.headers)
         print('start download', url)
+        rsp = requests.get(url, headers=self.headers)
         with open(filepath, 'wb') as f:
             f.write(rsp.content)
             print('end download', url)
 
-    def begin_thread(self, processes = 10):
-        print('开始线程下载')
-        self.pool = Pool(processes)
+    def downland_one_with_progress(self, img):
+        url, directory, filepath = img
+        # 如果文件已经存在，放弃下载
+        if os.path.exists(filepath):
+            print('exists:', filepath)
+            return
+        setup_download_dir(directory)
+        print('start download', url)
+        with closing(requests.get(url, headers=self.headers, stream=True)) as response:
+            chunk_size = 1024000  # 单次请求最大值
+            content_size = int(response.headers['content-length'])  # 内容体总大小
+            progress = ProgressBar(filepath, total=content_size,
+                                   unit="KB", run_status="正在下载", fin_status="下载完成")
+            with open(filepath, "wb") as file:
+                for data in response.iter_content(chunk_size=chunk_size):
+                    file.write(data)
+                    progress.refresh(count=len(data))
+        print('end download', url)
+
+    def begin_thread(self, threading_count=4):
+        print('开始多线程下载')
+        self.queue = Queue()
+        for i in range(threading_count):
+            w = threading.Thread(target=self.thread_down_img, args=(self.queue,))
+            w.setDaemon(True)
+            w.start()
         pass
 
     def stop_thread(self):
-        self.pool.close()
-        self.pool.join()
-        print('完成线程下载')
+        # self.queue.task_done()
+        self.queue.close()
+        print('完成多线程下载')
         pass
 
-    def thread_downland(self,img):
-        print(self.pool)
-        self.pool.apply_async(self.download_one, (img,))
+    def thread_downland(self, img):
+        self.queue.put(img)
+        pass
+
+    def thread_down_img(self, q):
+        while True:
+            if not q.empty():
+                img = q.get()
+                self.downland_one_with_progress(img)
+                time.sleep(1)
+            # q.task_done()
         pass
 
     def download_many(self, imgs, processes=10):
